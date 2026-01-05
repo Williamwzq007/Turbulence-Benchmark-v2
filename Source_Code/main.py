@@ -60,7 +60,7 @@ if __name__ == "__main__":
             all_runs_q_test_end = time.time()
             report_content = {
                 "Question": q,
-                "AS": CCS,
+                "AS": AS,
                 "CPS": CPS,
                 "CCS": CCS,
                 "Distribution": prepared_data,

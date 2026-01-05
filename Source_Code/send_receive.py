@@ -7,6 +7,9 @@ from termcolor import cprint
 from auxiliary_functions import Auxiliary
 
 
+HAS_SIGALRM = hasattr(signal, "SIGALRM") and (getattr(signal, "SIGALRM", None) is not None)
+HAS_ALARM = hasattr(signal, "alarm")
+
 def send_prompt_recieve_response(path, q, r, model_params, seed, num):
     auxiliary = Auxiliary()
     llm = CallLLM(model_params)
@@ -20,14 +23,28 @@ def send_prompt_recieve_response(path, q, r, model_params, seed, num):
     openai_api = ["gpt-3.5-turbo", "gpt-4", "gpt-4o-2024-08-06", "deepseek-coder", "databricks/dbrx-instruct", "Qwen/Qwen2.5-72B-Instruct", "Qwen/Qwen2.5-Coder-32B-Instruct", "cognitivecomputations/dolphin-mixtral-8x22b", "google/gemma-2-27b-it"]
     cohere = ["command", "command-r-plus-08-2024"]
     claude = ["claude-3-5-sonnet-20240620", "claude-3-5-haiku-20241022"]
-    google = ["gemini-1.5-pro", "codegemma-7b-it"]
+    google = [
+    "models/gemini-pro-latest",
+    "models/gemini-flash-latest",
+    "models/gemini-flash-lite-latest",
+    "models/gemini-2.0-flash",
+    "models/gemini-2.5-pro",
+    "models/gemini-2.5-flash",
+    "codegemma-7b-it",
+]
     mistral = ["codestral-latest", "mistral-large-latest"]
     azure_models = ["Meta-Llama-3-1-405B-Instruct", "Meta-Llama-3-1-70B-Instruct-ofoo", "Phi-3-medium-4k-instruct"]
     huggingface = ["starcoder2-15b-instruct-v0.1", "qwen2.5-coder-7b-instruct"]
 
     model = auxiliary.rename_model(model_name)
 
-    _, columns = os.popen("stty size", "r").read().split()
+    import shutil
+
+    try:
+        columns = shutil.get_terminal_size(fallback=(120, 30)).columns
+    except Exception:
+        columns = 120
+
 
     auxiliary.create_model_folder(path + f"/Q{q}", model, num)
     params_list = auxiliary.get_params(q, seed)
@@ -85,22 +102,13 @@ def send_prompt_recieve_response(path, q, r, model_params, seed, num):
         
         while True:
             try:
-                auxiliary.set_timeout(timeout)
+                start_time_real = time.time()
+
                 if model_name in openai_api:
-                    llm.set_prompt(question, False)
-                    start_time_real = time.time()
+                    llm.set_prompt(question, True)
                     response, prompt = llm.openai_api()
 
-                elif model_name in cohere:
-                    llm.set_prompt(question, False)
-                    start_time_real = time.time()
-                    response, prompt = llm.cohere()
-                
-                elif model_name in claude:
-                    llm.set_prompt(question, False)
-                    start_time_real = time.time()
-                    response, prompt = llm.claude()
-                
+
                 elif model_name in google:
                     if model_name == "codegemma-7b-it":
                         llm.set_prompt(question, False)
@@ -110,21 +118,18 @@ def send_prompt_recieve_response(path, q, r, model_params, seed, num):
                         llm.set_prompt(question, True)
                         start_time_real = time.time()
                         response, prompt = llm.gemini()
-                
-                elif model_name in mistral:
-                    llm.set_prompt(question, False)
-                    start_time_real = time.time()
-                    response, prompt = llm.mistral()
-                
+
+
                 elif model_name in azure_models:
                     llm.set_prompt(question, False)
-                    start_time_real = time.time()
                     response, prompt = llm.azure(model)
 
                 elif model_name in huggingface:
                     llm.set_prompt(question, True)
-                    start_time_real = time.time()
                     response, prompt = llm.huggingface()
+
+                else:
+                    raise ValueError(f"Unknown model name: {model_name}")
 
                 inference_latency.append(time.time() - start_time_real)
                 break
@@ -138,8 +143,8 @@ def send_prompt_recieve_response(path, q, r, model_params, seed, num):
                 time.sleep(sleep_duration)
                 sleep_duration *= 2
 
-            finally:
-                signal.alarm(0)
+            # finally:
+            #     signal.alarm(0)
 
         cprint(f"The {model_name} response was received.", "light_green")
         cprint(

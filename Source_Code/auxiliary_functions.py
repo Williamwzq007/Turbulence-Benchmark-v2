@@ -105,35 +105,59 @@ class Auxiliary():
         return final_list
 
 
-    def calculate_accuracy(data, R, M):
+    
+    def calculate_accuracy(self, data, R=None, M=None, *args):
         s = 0
         for lst in data:
             s += sum(lst)
-        
-        R = len(data[0])
+
+        R = len(data[0]) if data and data[0] else 0
         M = len(data)
-        return s / (R * M)
+
+        return (s / (R * M)) if (R * M) != 0 else 0.0
 
 
-    def calculate_correctness_potential(data, M):
+
+    def calculate_correctness_potential(self, data, M=None, *args):
+        """
+        Correctness Potential (CPS):
+        fraction of parameter settings for which
+        at least one round succeeds
+        """
+        if not data:
+            return 0.0
+
         s = 0
         for lst in data:
             if sum(lst) >= 1:
                 s += 1
-        
+
         M = len(data)
         return s / M
 
+    
 
-    def calculate_consistent_correctness(data, R, M):
+    def calculate_consistent_correctness(self, data, R=None, M=None, *args):
+        """
+        Consistent Correctness (CCS):
+        fraction of parameter settings for which
+        all rounds succeed
+        """
+        if not data or not data[0]:
+            return 0.0
+
         s = 0
         R = len(data[0])
+
         for lst in data:
             if sum(lst) == R:
                 s += 1
 
         M = len(data)
         return s / M
+
+
+
 
 
     def checker(self, q_no, c, api_name, no):
@@ -206,12 +230,12 @@ class Auxiliary():
 
     def create_model_folder(self, path, api_name, no):
         full_path = path + f"/{api_name}_results_{no}"
-        Path(full_path).mkdir(parents=True, exist_ok=False)
+        Path(full_path).mkdir(parents=True, exist_ok=True)
 
 
     def create_result_folder(self, path, c, api_name, no):
         full_path = path + f"/{api_name}_results_{no}/Folder_{c}"
-        Path(full_path).mkdir(parents=True, exist_ok=False)
+        Path(full_path).mkdir(parents=True, exist_ok=True)
 
 
     def create_pytest_ini_file(self, q_no, c, api_name, no, timeout, num_of_processes):
@@ -1078,10 +1102,48 @@ class Auxiliary():
         with open(f"Q{q_no}/{api_name}_results_{no}/Folder_{c}/info.json", "w") as f:
             json.dump(d, f, ensure_ascii=False, indent=2)
 
+    def write_info_file(self, q_no, api_name, c, params, function_name, no):
+        import os
+        import json
+
+        # Ensure folder exists before writing
+        folder_dir = os.path.join(f"Q{q_no}", f"{api_name}_results_{no}", f"Folder_{c}")
+        os.makedirs(folder_dir, exist_ok=True)
+
+        file_path = os.path.join(folder_dir, "info.json")
+
+        info = {
+            "question_number": q_no,
+            "model": api_name,
+            "folder_number": c,
+            "round_number": no,
+            "function_name": function_name,
+            "parameters": params,
+        }
+
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(info, f, indent=2, ensure_ascii=False)
 
     def write_param_file(self, q, model, last_number, params_list):
         length = len(params_list)
         with open(f"Q{q}/{model}_results_{last_number}/all_params.txt", "w") as f:
+            for i in range(length):
+                if i != length - 1:
+                    f.write(f"{str(params_list[i])}\n")
+                else:
+                    f.write(str(params_list[i]))
+    
+    def write_param_file(self, q, model, last_number, params_list):
+        import os
+
+        # Ensure output directory exists (Windows-safe)
+        out_dir = os.path.join(f"Q{q}", f"{model}_results_{last_number}")
+        os.makedirs(out_dir, exist_ok=True)
+
+        file_path = os.path.join(out_dir, "all_params.txt")
+
+        length = len(params_list)
+        with open(file_path, "w", encoding="utf-8") as f:
             for i in range(length):
                 if i != length - 1:
                     f.write(f"{str(params_list[i])}\n")

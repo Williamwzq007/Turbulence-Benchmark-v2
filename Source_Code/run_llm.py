@@ -1,23 +1,31 @@
 import os
 from openai import OpenAI
-import anthropic
-import cohere
-import dashscope
+# import anthropic
+# import cohere
+# import dashscope
 import google.generativeai as genai
-from mistralai import Mistral
-from google.cloud import aiplatform
-from google.protobuf import json_format
-from google.protobuf.struct_pb2 import Value
-from azure.ai.inference import ChatCompletionsClient
-from azure.core.credentials import AzureKeyCredential
+# from mistralai import Mistral
+# from google.cloud import aiplatform
+# from google.protobuf import json_format
+# from google.protobuf.struct_pb2 import Value
+# from azure.ai.inference import ChatCompletionsClient
+# from azure.core.credentials import AzureKeyCredential
 
 
 
 class CallLLM():
     def __init__(self, params):
         self.model_params = params
-        self.system_prompt = "You are an expert in Python programming. You are given a text specification surrounded by angle brackets. Create Python code according to the text specification. The Python code should not contain any comments. The Python code should be delimited only by triple backticks."
-        self.prompt = ""
+        self.system_prompt = (
+        "You are an expert Python programmer. "
+        "You are given a specification surrounded by angle brackets.\n"
+        "STRICT RULES:\n"
+        "1) Output ONLY ONE Python code block delimited by triple backticks.\n"
+        "2) Output NOTHING outside the code block (no explanation).\n"
+        "3) Do NOT use ellipses '...' or any abbreviation anywhere.\n"
+        "4) The function name and the number of arguments MUST exactly match the specification.\n"
+        "5) No comments.\n"
+)
         
 
     def set_prompt(self, text, flag):
@@ -26,19 +34,89 @@ class CallLLM():
         else:
             self.prompt = "<" + text + ">"
 
+    def mock(self):
+        """
+        A local mock model that returns a minimal Python snippet wrapped in triple backticks.
+        This is only used to test that the whole benchmark pipeline runs end-to-end,
+        without any external API calls.
+        """
+        response = (
+            "```python\n"
+            "def solution(*args, **kwargs):\n"
+            "    return None\n"
+            "```"
+        )
+        return response, getattr(self, "prompt", "")
+
 
     def gemini(self):
-        genai.configure(api_key=os.environ['GEMINI_API_KEY'])
+        import os
+        import google.generativeai as genai
+
+    # configure api key
+        genai.configure(api_key=os.environ["GEMINI_API_KEY"])
+
+    # read model params
+        model_name = self.model_params.get("model")
+        if not model_name:
+            raise ValueError("Missing model name in self.model_params['model']")
+
+        max_tokens = self.model_params.get(
+        "max_tokens",
+            self.model_params.get("max_output_tokens", 512),
+        )
+        temperature = self.model_params.get("temperature", 0.2)
+
+    # ensure prompt exists
+        if not hasattr(self, "prompt") or not str(self.prompt).strip():
+            raise ValueError(
+            "Prompt is empty. Did you call llm.set_prompt(...) before llm.gemini()?"
+        )
+
+    # create model
         model = genai.GenerativeModel(
-            model_name=self.model_params['model'],
-            tools='code_execution'
-            )
-        response = model.generate_content(self.prompt, 
-                                          generation_config=genai.types.GenerationConfig(candidate_count=1, max_output_tokens=self.model_params['max_tokens'], temperature=self.model_params['temperature'],),
-                                          )
-        
-        return str(response), self.prompt
-    
+            model_name=model_name
+        )
+
+    # generate
+        response = model.generate_content(
+            str(self.prompt),
+            generation_config=genai.types.GenerationConfig(
+            candidate_count=1,
+            max_output_tokens=int(max_tokens),
+            temperature=float(temperature),
+            ),
+        )
+
+    # extract text safely
+        text = None
+
+        try:
+            text = response.text
+        except Exception:
+            text = None
+
+        if not text:
+            try:
+                if response.candidates:
+                    parts = response.candidates[0].content.parts
+                    text = "".join(
+                        p.text for p in parts if hasattr(p, "text") and p.text
+                    )
+            except Exception:
+                text = None
+
+        if not text or not text.strip():
+            raise RuntimeError(
+                "Gemini returned no text (likely MAX TOKENS). "
+                "Retrying with same prompt."
+             )
+
+        return text, str(self.prompt)
+
+
+
+
 
     def mistral(self):
         client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
@@ -162,7 +240,9 @@ class CallLLM():
             temperature=self.model_params['temperature'],
         )
 
-        return str(response), self.prompt
+        content = response.choices[0].message.content
+        return content, self.prompt
+
     
 
     def huggingface(self):
@@ -226,6 +306,9 @@ class CallLLM():
             )
         
         return str(response), self.prompt
+    
+    
+
 
     
 

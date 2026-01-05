@@ -32,7 +32,26 @@ def run_test(q, r, model_params, num, num_of_processes):
         generated_answer = ""
         correct_random_inputs.clear()
         info_dict = auxiliary.read_file(q, model, c, "info", num, "json")
-        params, function_name = info_dict["params"], info_dict["function_name"]
+        function_name = info_dict.get("function_name")
+
+        params = (
+            info_dict.get("params")
+            or info_dict.get("parameters")
+            or info_dict.get("param_set")
+            or info_dict.get("param")
+            or info_dict.get("args")
+        )
+
+        if function_name is None or params is None:
+            raise KeyError(
+                f"Missing keys in info_dict. Available keys: {list(info_dict.keys())}"
+            )
+
+
+
+
+
+
         auxiliary.parameterize_model_answer(q, c, params, model, num)
         generated_response = auxiliary.read_file(q, model, c, "response", num, "txt")
         extract_result, generated_answer = auxiliary.extract_code(generated_response, function_name)
